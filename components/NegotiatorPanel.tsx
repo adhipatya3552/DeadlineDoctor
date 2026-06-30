@@ -8,10 +8,10 @@ export function NegotiatorPanel({ task, onUpdate }: { task: Task; onUpdate: (id:
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState('')
   const [copied,  setCopied]  = useState(false)
-  const [showForm, setShowForm] = useState(true)
   const [form, setForm] = useState({ name: '', role: 'professor', reason: '', ext: '48 hours' })
 
   const result = task.negotiatorEmail ? JSON.parse(task.negotiatorEmail) : null
+  const [showForm, setShowForm] = useState(!result)
 
   const generate = async () => {
     setLoading(true); setError('')
@@ -42,7 +42,7 @@ export function NegotiatorPanel({ task, onUpdate }: { task: Task; onUpdate: (id:
         <span className="text-text-muted text-xs">— AI requests extension</span>
       </div>
 
-      {showForm && !result && (
+      {showForm && (
         <div className="space-y-2">
           <div className="grid grid-cols-2 gap-2">
             <input className="dd-input text-xs" placeholder="Recipient name" value={form.name} onChange={e => f('name', e.target.value)} />
