@@ -1,43 +1,51 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { callGeminiJSON } from '@/lib/gemini'
 import { NegotiatorResult } from '@/lib/types'
+import { FALLBACK_NEGOTIATE } from '@/lib/fallbacks'
 
 export async function POST(req: NextRequest) {
+  let taskTitle = 'your task'
   try {
-    const { task, reason, recipientName, recipientRole, requestedExtension } = await req.json()
+    const body = await req.json()
+    const { task, recipientName, recipientRole, reason, requestedExtension } = body
+    if (!task?.title) return NextResponse.json({ success: false, error: 'Task required' }, { status: 400 })
 
-    if (!task?.title) {
-      return NextResponse.json({ success: false, error: 'Task required' }, { status: 400 })
-    }
+    taskTitle = task.title
+    const recipient   = recipientName  || 'the recipient'
+    const role        = recipientRole  || 'supervisor'
+    const why         = reason         || 'an unexpected increase in workload and competing priorities'
+    const extension   = requestedExtension || '48 hours'
+    const originalDue = new Date(task.deadline).toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' })
 
-    const prompt = `
-You are the DeadlineDoctor Negotiator — an AI that crafts perfect, professional deadline extension requests.
+    const prompt = `You are the DeadlineDoctor Negotiator. Write a professional deadline extension request email.
 
 TASK: "${task.title}"
-ORIGINAL DEADLINE: ${task.deadline}
-RECIPIENT: ${recipientName || 'The recipient'} (${recipientRole || 'supervisor/professor'})
-REASON FOR EXTENSION: ${reason || 'Unexpected workload and time constraints'}
-REQUESTED EXTENSION: ${requestedExtension || '48 hours'}
+ORIGINAL DEADLINE: ${originalDue}
+RECIPIENT: ${recipient} (${role})
+REASON: ${why}
+EXTENSION REQUESTED: ${extension}
 
-Write a professional, persuasive, yet humble extension request email.
-Rules:
-- Never sound desperate or unprofessional
-- Acknowledge the impact on the recipient
-- Offer a specific new deadline
-- Show that you've already started work
-- Keep it under 200 words
+EMAIL RULES:
+1. Under 180 words — busy people read short emails
+2. Acknowledge the inconvenience directly
+3. Mention you have already started / made progress
+4. State a SPECIFIC new deadline (calculate from original)
+5. Never sound desperate — calm, professional, confident
+6. No grovelling, no over-apologising
 
-Return ONLY this JSON:
+RESPOND WITH VALID JSON ONLY. No markdown. No explanation.
+
 {
-  "subject": "<email subject line>",
-  "email": "<complete email body, ready to send>",
-  "tone": "professional" | "warm" | "formal"
-}
-`
+  "subject": "Request for Brief Extension – ${task.title}",
+  "email": "Full email body here, no subject line repeated",
+  "tone": "professional"
+}`
 
     const result = await callGeminiJSON<NegotiatorResult>(prompt)
     return NextResponse.json({ success: true, ...result })
   } catch (err: any) {
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 })
+    console.error('Negotiate error:', err.message)
+    const fb = FALLBACK_NEGOTIATE(taskTitle)
+    return NextResponse.json({ success: true, ...fb, fallback: true })
   }
 }

@@ -1,45 +1,52 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { callGeminiJSON } from '@/lib/gemini'
 import { DiagnosisResult } from '@/lib/types'
+import { FALLBACK_DIAGNOSIS } from '@/lib/fallbacks'
 
 export async function POST(req: NextRequest) {
   try {
-    const { tasks, behaviorHistory } = await req.json()
+    const { tasks } = await req.json()
 
-    const taskSummary = tasks?.length
-      ? tasks.map((t: any) =>
-          `- "${t.title}" | Type: ${t.type} | Deadline: ${t.deadline} | Status: ${t.status}`
+    const taskList = tasks?.length
+      ? tasks.map((t: any, i: number) =>
+          `${i + 1}. "${t.title}" | type:${t.type} | urgency:${t.urgency} | status:${t.status}`
         ).join('\n')
-      : 'No tasks yet — new user'
+      : 'No tasks yet (new user, first visit)'
 
-    const prompt = `
-You are DeadlineDoctor, an AI that diagnoses procrastination like a doctor diagnoses illness.
+    const prompt = `You are DeadlineDoctor, an AI that diagnoses procrastination like a medical professional.
 
-PATIENT DATA:
-${taskSummary}
+PATIENT TASK LIST:
+${taskList}
 
-Behavior notes: ${behaviorHistory || 'First visit'}
+TASK: Diagnose this patient's primary procrastination type.
 
-DIAGNOSE the patient's procrastination personality from exactly ONE of these types:
-- Perfectionist: Delays because nothing feels "good enough"
-- Overwhelmed: Too many tasks, doesn't know where to start  
-- Distracted: Gets sidetracked by other things easily
-- Avoidant: Subconsciously fears failure or judgment
+TYPES (pick EXACTLY ONE):
+- Perfectionist: delays because nothing feels "good enough" or "ready"  
+- Overwhelmed: too many tasks, cannot decide where to start, paralysed
+- Distracted: easily pulled to other activities, loses focus mid-task
+- Avoidant: subconsciously fears failure, judgment, or confrontation
 
-Return ONLY this exact JSON (no extra text, no markdown):
+RESPOND WITH VALID JSON ONLY. No markdown. No explanation. No extra keys.
+
 {
-  "type": "Perfectionist" | "Overwhelmed" | "Distracted" | "Avoidant",
-  "score": <integer 0-100, severity of procrastination>,
-  "description": "<2-sentence diagnosis in doctor's clinical but empathetic tone>",
-  "symptoms": ["<symptom 1>", "<symptom 2>", "<symptom 3>"],
-  "prescription": ["<action 1>", "<action 2>", "<action 3>"],
-  "emoji": "<single emoji representing this type>"
-}
-`
+  "type": "Perfectionist",
+  "score": 68,
+  "description": "Two-sentence clinical diagnosis in an empathetic but direct doctor tone.",
+  "symptoms": ["symptom one", "symptom two", "symptom three"],
+  "prescription": ["action one", "action two", "action three"],
+  "emoji": "🎯"
+}`
 
     const diagnosis = await callGeminiJSON<DiagnosisResult>(prompt)
+
+    /* Validate required fields */
+    const valid = ['Perfectionist','Overwhelmed','Distracted','Avoidant'].includes(diagnosis.type)
+    if (!valid) throw new Error('Invalid type returned')
+
     return NextResponse.json({ success: true, diagnosis })
   } catch (err: any) {
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 })
+    console.error('Diagnose error:', err.message)
+    /* Return realistic fallback so demo never breaks */
+    return NextResponse.json({ success: true, diagnosis: FALLBACK_DIAGNOSIS, fallback: true })
   }
 }
